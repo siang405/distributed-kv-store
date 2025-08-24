@@ -1,0 +1,29 @@
+# Build directories
+/build/
+/CMakeFiles/
+/cmake-build-*/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+
+# Binaries
+*.o
+*.a
+*.so
+*.exe
+*.out
+runtime
+test_hashring
+
+# Logs
+*.log
+
+# macOS / Linux temp files
+.DS_Store
+*.swp
+*.tmp
