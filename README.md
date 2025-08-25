@@ -1,90 +1,132 @@
 # Distributed KV Store with Consistent Hashing
 
-This project implements a simple **distributed key-value store simulator** in C++ using **consistent hashing**.
-It demonstrates how distributed systems manage **node addition/removal** with **minimal data movement**.
+A simple **distributed key-value store** built in C++ that demonstrates:
 
-## Features
+* **Consistent Hashing** for load balancing
+* **Node join/leave** with automatic rebalancing
+* **TCP-based communication** between coordinator and storage nodes
+* **CLI interface** for interactive operations
+* **Statistics & monitoring** (`stats` command)
 
-* **Consistent Hashing**
+This project is designed to simulate core ideas behind distributed databases and caching systems (like DynamoDB, Cassandra, or Redis Cluster).
 
-  * Keys are mapped to nodes via a hash ring.
-  * Supports virtual nodes (replicas) to balance load.
-* **Node Management**
+---
 
-  * Add or remove nodes dynamically.
-  * Automatic rebalancing of keys across nodes.
-* **Key-Value Operations**
+## 🚀 Features
 
-  * `put <key> <value>`: insert or update a key.
-  * `get <key>`: retrieve a value.
-  * `del <key>`: delete a key.
-* **CLI Commands**
+* **Consistent Hashing Ring**
 
-  * `addnode <id>`: add a node to the ring.
-  * `removenode <id>`: remove a node and redistribute its data.
-  * `show`: list all active nodes and their data sizes.
-* **Rebalancing**
+  * Supports virtual nodes (replicas) to smooth load distribution
+* **Dynamic Node Management**
 
-  * When a node is added or removed, only affected keys are moved.
-  * Ensures minimal disruption, a core property of consistent hashing.
+  * `addnode <id> <port>` and `removenode <id>` with automatic data rebalancing
+* **Core KV Operations**
 
-## Build & Run
+  * `put <k> <v>`, `get <k>`, `del <k>`
+* **Monitoring**
+
+  * `show` → Displays all active nodes with their key counts
+  * `stats` → Displays total keys, number of nodes, and average keys per node
+* **JSON-based RPC**
+
+  * Lightweight messaging using [nlohmann/json](https://github.com/nlohmann/json)
+
+---
+
+## 🛠 Build Instructions
+
+### Requirements
+
+* C++17 or higher
+* CMake >= 3.10
+* POSIX sockets (Linux/macOS)
+
+### Build
 
 ```bash
 mkdir build && cd build
 cmake ..
 make
+```
+
+---
+
+## ▶️ Run the System
+
+Start multiple node servers (in separate terminals):
+
+```bash
+./node_server 5001
+./node_server 5002
+```
+
+Run the coordinator CLI:
+
+```bash
 ./runtime
 ```
 
-## Example CLI Session
+---
+
+## 💻 CLI Commands
+
+| Command               | Description                                                   |
+| --------------------- | ------------------------------------------------------------- |
+| `addnode <id> <port>` | Add a new storage node at given port                          |
+| `removenode <id>`     | Remove a storage node                                         |
+| `put <key> <value>`   | Store key-value pair                                          |
+| `get <key>`           | Retrieve value for a key                                      |
+| `del <key>`           | Delete a key                                                  |
+| `show`                | Show active nodes with their key counts                       |
+| `stats`               | Show system-wide stats (nodes, total keys, avg keys per node) |
+| `exit`                | Exit the coordinator CLI                                      |
+
+---
+
+## 📝 Example Session
 
 ```
 Distributed KV Store with Consistent Hashing
-Commands: addnode <id>, removenode <id>, put <k> <v>, get <k>, del <k>, show
+Commands: addnode <id> <port>, removenode <id>, put <k> <v>, get <k>, del <k>, show, stats, exit
 
-> addnode A
-Node added: A (with 3 replicas)
+> addnode A 5001
+Node added: A (127.0.0.1:5001)
 Rebalancing after adding node A...
 
-> addnode B
-Node added: B (with 3 replicas)
+> addnode B 5002
+Node added: B (127.0.0.1:5002)
 Rebalancing after adding node B...
 
-> put apple 1
-[B] PUT apple = 1
+> put apple 123
+[A] PUT apple = 123 -> {"status":"ok"}
 
-> put banana 2
-[B] PUT banana = 2
+> put banana 456
+[B] PUT banana = 456 -> {"status":"ok"}
 
-> put cherry 3
-[B] PUT cherry = 3
-
-> show
-Active Nodes:
-  B (size=3)
-  A (size=0)
-
-> addnode C
-Node added: C (with 3 replicas)
-Rebalancing after adding node C...
-[C] PUT apple = 1
-[C] PUT banana = 2
-[C] PUT cherry = 3
+> get apple
+apple -> 123
 
 > show
 Active Nodes:
-  B (size=0)
-  C (size=3)
-  A (size=0)
+  A (127.0.0.1:5001, keys=1)
+  B (127.0.0.1:5002, keys=1)
+
+> stats
+
+[System Stats]
+Nodes: 2
+Total Keys: 2
+Avg Keys per Node: 1
 ```
 
-## Future Work
+---
 
-* Persistence layer (store data on disk instead of memory).
-* Replication factor for fault tolerance.
-* Integration with network layer for real distributed testing.
-* Benchmarking tools for key distribution and load balance analysis.
+## 📌 Future Work
+
+* Replication factor > 1 (data redundancy)
+* Fault tolerance (node crash recovery)
+* Smarter rebalance policies
+* Benchmarking & visualization
 
 ---
 
