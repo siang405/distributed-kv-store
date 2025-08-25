@@ -1,91 +1,136 @@
 #include "coordinator.hpp"
 #include <iostream>
+#include <stdexcept>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+
 using namespace std;
+using json = nlohmann::json;
 
 Coordinator::Coordinator() : ring(3) {}
 
-void Coordinator::add_node(const string& node_id) {
-    if (nodes.count(node_id)) {
-        cout << "Node already exists: " << node_id << "\n";
-        return;
-    }
-    nodes[node_id] = make_shared<Node>(node_id);
-    ring.add_node(node_id);
+string Coordinator::send_request(const string& host, int port, const json& j) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) throw runtime_error("Socket creation failed");
 
-    cout << "Rebalancing after adding node " << node_id << "...\n";
+    sockaddr_in serv_addr{};
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+    if (inet_pton(AF_INET, host.c_str(), &serv_addr.sin_addr) <= 0)
+        throw runtime_error("Invalid address");
 
-    // 遍歷所有 key，檢查是否要搬到新 node
-    for (auto& [id, node] : nodes) {
-        if (id == node_id) continue; // 跳過新加的 node
+    if (connect(sock, (sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
+        throw runtime_error("Connection failed");
 
-        vector<pair<string,string>> to_move;
-        for (auto& kv : node->get_all()) {
-            string target = ring.get_node(kv.first);
-            if (target == node_id) {
-                to_move.push_back(kv);
-            }
-        }
+    string msg = j.dump();
+    send(sock, msg.c_str(), msg.size(), 0);
 
-        for (auto& kv : to_move) {
-            node->del(kv.first);
-            nodes[node_id]->put(kv.first, kv.second);
-        }
-    }
+    char buffer[4096] = {0};
+    int len = read(sock, buffer, sizeof(buffer));
+    close(sock);
+
+    return string(buffer, len);
 }
 
-void Coordinator::remove_node(const string& node_id) {
-    if (!nodes.count(node_id)) {
-        cout << "Node not found: " << node_id << "\n";
-        return;
-    }
+void Coordinator::add_node(const string& id, int port) {
+    ring.add_node(id);
+    nodes[id] = {"127.0.0.1", port};
+    cout << "Node added: " << id << " (127.0.0.1:" << port << ")\n";
+    cout << "Rebalancing after adding node " << id << "...\n";
+}
 
-    // 先拿出該 node 的所有資料
-    vector<pair<string,string>> backup = nodes[node_id]->get_all();
-
-    nodes.erase(node_id);
-    ring.remove_node(node_id);
-
-    cout << "Rebalancing after removing node " << node_id << "...\n";
-
-    // 把資料重新放回其他節點
-    for (auto& kv : backup) {
-        put(kv.first, kv.second);
-    }
+void Coordinator::remove_node(const string& id) {
+    ring.remove_node(id);
+    nodes.erase(id);
+    cout << "Node removed: " << id << "\n";
 }
 
 void Coordinator::put(const string& key, const string& value) {
     string node_id = ring.get_node(key);
-    if (node_id.empty()) {
-        cout << "No available nodes\n";
-        return;
+    if (nodes.count(node_id)) {
+        auto n = nodes[node_id];
+        json req = {{"op","put"}, {"key",key}, {"value",value}};
+        auto resp = send_request(n.host, n.port, req);
+        cout << "[" << node_id << "] PUT " << key << " = " << value
+             << " -> " << resp << "\n";
     }
-    nodes[node_id]->put(key, value);
 }
 
 string Coordinator::get(const string& key) {
     string node_id = ring.get_node(key);
-    if (node_id.empty()) {
-        return "No available nodes";
+    if (nodes.count(node_id)) {
+        auto n = nodes[node_id];
+        json req = {{"op","get"}, {"key",key}};
+        auto resp_str = send_request(n.host, n.port, req);
+
+        try {
+            auto resp = json::parse(resp_str);
+            if (resp.contains("status") && resp["status"] == "ok" && resp.contains("value")) {
+                return resp["value"];
+            } else {
+                return "[not found]";
+            }
+        } catch (...) {
+            return "[error parsing response]";
+        }
     }
-    return nodes[node_id]->get(key);
+    return "[no node]";
 }
 
 void Coordinator::del(const string& key) {
     string node_id = ring.get_node(key);
-    if (node_id.empty()) {
-        cout << "No available nodes\n";
-        return;
+    if (nodes.count(node_id)) {
+        auto n = nodes[node_id];
+        json req = {{"op","del"}, {"key",key}};
+        auto resp = send_request(n.host, n.port, req);
+        cout << "[" << node_id << "] DEL " << key << " -> " << resp << "\n";
     }
-    nodes[node_id]->del(key);
 }
 
-void Coordinator::show_nodes() {
+void Coordinator::show_nodes() const {
     cout << "Active Nodes:\n";
-    for (auto& [id, node] : nodes) {
-        cout << "  " << id << " (size=" << node->get_size() << ")\n";
+    for (const auto& [id, n] : nodes) {
+        json req = {{"op","size"}};
+        auto resp_str = send_request(n.host, n.port, req);
+        int key_count = -1;
+        try {
+            auto resp = json::parse(resp_str);
+            if (resp.contains("status") && resp["status"] == "ok") {
+                key_count = resp.value("keys", -1);
+            }
+        } catch (...) {
+            // ignore parse errors
+        }
+        cout << "  " << id << " (" << n.host << ":" << n.port
+             << ", keys=" << key_count << ")\n";
     }
 }
 
-void Coordinator::show_ring() {
-    ring.show_ring();
+void Coordinator::show_stats() const {
+    int total_keys = 0;
+    int node_count = nodes.size();
+
+    cout << "\n[System Stats]\n";
+    for (const auto& [id, n] : nodes) {
+        json req = {{"op","size"}};
+        auto resp_str = send_request(n.host, n.port, req);
+        int key_count = 0;
+        try {
+            auto resp = json::parse(resp_str);
+            if (resp.contains("status") && resp["status"] == "ok") {
+                key_count = resp.value("keys", 0);
+            }
+        } catch (...) {
+            key_count = -1; // failed request
+        }
+        total_keys += max(0, key_count);
+    }
+
+    cout << "Nodes: " << node_count << "\n";
+    cout << "Total Keys: " << total_keys << "\n";
+    if (node_count > 0) {
+        cout << "Avg Keys per Node: " << (total_keys / node_count) << "\n";
+    }
+    cout << endl;
 }

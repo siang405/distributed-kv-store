@@ -1,24 +1,34 @@
 #pragma once
+#include <string>
+#include <unordered_map>
 #include "hash_ring.hpp"
 #include "node.hpp"
-#include <unordered_map>
-#include <memory>
+#include <nlohmann/json.hpp>
+
+using namespace std;
+using json = nlohmann::json;
+
+struct NodeInfo {
+    string host;
+    int port;
+};
 
 class Coordinator {
+private:
+    HashRing ring;
+    unordered_map<string, NodeInfo> nodes;
+
+    // 👉 靜態 helper，因為不依賴 Coordinator 狀態
+    static string send_request(const string& host, int port, const json& j);
+
 public:
     Coordinator();
 
-    void add_node(const std::string& node_id);
-    void remove_node(const std::string& node_id);
-
-    void put(const std::string& key, const std::string& value);
-    std::string get(const std::string& key);
-    void del(const std::string& key);
-
-    void show_nodes();
-    void show_ring();
-
-private:
-    HashRing ring;
-    std::unordered_map<std::string, std::shared_ptr<Node>> nodes;
+    void add_node(const string& id, int port);
+    void remove_node(const string& id);
+    void put(const string& key, const string& value);
+    string get(const string& key);
+    void del(const string& key);
+    void show_stats() const;
+    void show_nodes() const;
 };
