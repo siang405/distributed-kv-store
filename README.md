@@ -7,33 +7,47 @@ A simple **distributed key-value store** built in C++ that demonstrates:
 * **TCP-based communication** between coordinator and storage nodes
 * **CLI interface** for interactive operations
 * **Statistics & monitoring** (`stats` command)
+* **Replication** with configurable replica factor (`setreplica <N>`)
+* **Fault tolerance** by falling back to replicas if primary fails
 
 This project is designed to simulate core ideas behind distributed databases and caching systems (like DynamoDB, Cassandra, or Redis Cluster).
 
 ---
 
-## 🚀 Features
+## Features
 
 * **Consistent Hashing Ring**
 
   * Supports virtual nodes (replicas) to smooth load distribution
+
 * **Dynamic Node Management**
 
   * `addnode <id> <port>` and `removenode <id>` with automatic data rebalancing
+
+* **Replication**
+
+  * `setreplica <N>` allows keys to be stored on multiple nodes
+
+* **Fault Tolerance**
+
+  * If a node is down, coordinator will query replicas automatically
+
 * **Core KV Operations**
 
   * `put <k> <v>`, `get <k>`, `del <k>`
+
 * **Monitoring**
 
   * `show` → Displays all active nodes with their key counts
   * `stats` → Displays total keys, number of nodes, and average keys per node
+
 * **JSON-based RPC**
 
   * Lightweight messaging using [nlohmann/json](https://github.com/nlohmann/json)
 
 ---
 
-## 🛠 Build Instructions
+## Build Instructions
 
 ### Requirements
 
@@ -51,13 +65,14 @@ make
 
 ---
 
-## ▶️ Run the System
+## Run the System
 
 Start multiple node servers (in separate terminals):
 
 ```bash
 ./node_server 5001
 ./node_server 5002
+./node_server 5003
 ```
 
 Run the coordinator CLI:
@@ -68,7 +83,7 @@ Run the coordinator CLI:
 
 ---
 
-## 💻 CLI Commands
+## CLI Commands
 
 | Command               | Description                                                   |
 | --------------------- | ------------------------------------------------------------- |
@@ -79,15 +94,16 @@ Run the coordinator CLI:
 | `del <key>`           | Delete a key                                                  |
 | `show`                | Show active nodes with their key counts                       |
 | `stats`               | Show system-wide stats (nodes, total keys, avg keys per node) |
+| `setreplica <N>`      | Set replication factor (default 1)                            |
 | `exit`                | Exit the coordinator CLI                                      |
 
 ---
 
-## 📝 Example Session
+## Example Session
 
 ```
 Distributed KV Store with Consistent Hashing
-Commands: addnode <id> <port>, removenode <id>, put <k> <v>, get <k>, del <k>, show, stats, exit
+Commands: addnode <id> <port>, removenode <id>, put <k> <v>, get <k>, del <k>, setreplica <N>, show, stats, exit
 
 > addnode A 5001
 Node added: A (127.0.0.1:5001)
@@ -97,11 +113,13 @@ Rebalancing after adding node A...
 Node added: B (127.0.0.1:5002)
 Rebalancing after adding node B...
 
-> put apple 123
-[A] PUT apple = 123 -> {"status":"ok"}
+> setreplica 2
+[Coordinator] Replica set to 2
 
-> put banana 456
-[B] PUT banana = 456 -> {"status":"ok"}
+> put apple 123
+Replicas for key apple: A B
+[A] PUT apple = 123 -> {"status":"ok"}
+[B] PUT apple = 123 -> {"status":"ok"}
 
 > get apple
 apple -> 123
@@ -121,12 +139,13 @@ Avg Keys per Node: 1
 
 ---
 
-## 📌 Future Work
+## Future Work
 
-* Replication factor > 1 (data redundancy)
-* Fault tolerance (node crash recovery)
+* Heartbeat + automatic failover
+* Persistence (WAL / data.json)
 * Smarter rebalance policies
 * Benchmarking & visualization
+* Dockerized deployment
 
 ---
 

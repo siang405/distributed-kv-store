@@ -1,6 +1,7 @@
 #include "hash_ring.hpp"
 #include <iostream>
 #include <functional>
+#include <unordered_set>
 using namespace std;
 
 // 建構子
@@ -51,3 +52,28 @@ void HashRing::show_ring() {
         cout << "  " << h << " -> " << node << "\n";
     }
 }
+
+vector<string> HashRing::get_nodes(const string& key, int replicaN) {
+    vector<string> result;
+    if (ring.empty() || replicaN <= 0) return result;
+
+    size_t h = hash_fn(key);
+    auto it = ring.lower_bound(h);
+    if (it == ring.end()) it = ring.begin();
+
+    unordered_set<string> seen;
+    int traversed = 0;  // 最多走一整圈
+    while (result.size() < (size_t)replicaN && traversed < (int)ring.size()) {
+        const string& node = it->second;
+        if (!seen.count(node)) {
+            result.push_back(node);
+            seen.insert(node);
+        }
+        ++it;
+        if (it == ring.end()) it = ring.begin();
+        traversed++;
+    }
+
+    return result;
+}
+

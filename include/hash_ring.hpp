@@ -13,9 +13,12 @@ public:
     string get_node(const string& key);
 
     void show_ring();
+    vector<string> get_nodes(const string& key, int replicaN);
+
 
 private:
     int replicas;
     map<size_t, string> ring; // hash -> node_id
     size_t hash_fn(const string& key);
+
 };

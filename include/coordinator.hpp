@@ -1,4 +1,5 @@
 #pragma once
+#include <iostream>
 #include <string>
 #include <unordered_map>
 #include "hash_ring.hpp"
@@ -31,4 +32,11 @@ public:
     void del(const string& key);
     void show_stats() const;
     void show_nodes() const;
+    int replicaN = 1; 
+
+    void set_replica(int n) {
+        replicaN = max(1, n);
+        cout << "[Coordinator] Replica set to " << replicaN << endl;
+    }
+
 };

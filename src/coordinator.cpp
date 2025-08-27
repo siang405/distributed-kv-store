@@ -47,46 +47,63 @@ void Coordinator::remove_node(const string& id) {
 }
 
 void Coordinator::put(const string& key, const string& value) {
-    string node_id = ring.get_node(key);
-    if (nodes.count(node_id)) {
-        auto n = nodes[node_id];
-        json req = {{"op","put"}, {"key",key}, {"value",value}};
-        auto resp = send_request(n.host, n.port, req);
-        cout << "[" << node_id << "] PUT " << key << " = " << value
-             << " -> " << resp << "\n";
-    }
-}
-
-string Coordinator::get(const string& key) {
-    string node_id = ring.get_node(key);
-    if (nodes.count(node_id)) {
-        auto n = nodes[node_id];
-        json req = {{"op","get"}, {"key",key}};
-        auto resp_str = send_request(n.host, n.port, req);
-
-        try {
-            auto resp = json::parse(resp_str);
-            if (resp.contains("status") && resp["status"] == "ok" && resp.contains("value")) {
-                return resp["value"];
-            } else {
-                return "[not found]";
+    auto node_ids = ring.get_nodes(key, replicaN);
+    cout << "Replicas for key " << key << ": ";
+    for (auto &id : node_ids) cout << id << " ";
+    cout << endl;
+    for (auto& node_id : node_ids) {
+        if (nodes.count(node_id)) {
+            auto n = nodes[node_id];
+            json req = {{"op","put"}, {"key",key}, {"value",value}};
+            try {
+                auto resp = send_request(n.host, n.port, req);
+                cout << "[" << node_id << "] PUT " << key << " = " << value
+                     << " -> " << resp << "\n";
+            } catch (...) {
+                cerr << "[WARN] PUT failed on " << node_id << endl;
             }
-        } catch (...) {
-            return "[error parsing response]";
         }
     }
-    return "[no node]";
 }
 
+
+string Coordinator::get(const string& key) {
+    auto node_ids = ring.get_nodes(key, replicaN);
+    for (auto& node_id : node_ids) {
+        if (nodes.count(node_id)) {
+            auto n = nodes[node_id];
+            json req = {{"op","get"}, {"key",key}};
+            try {
+                auto resp_str = send_request(n.host, n.port, req);
+                auto resp = json::parse(resp_str);
+                if (resp.contains("status") && resp["status"] == "ok" && resp.contains("value")) {
+                    return resp["value"];
+                }
+            } catch (...) {
+                cerr << "[WARN] GET failed on " << node_id << endl;
+            }
+        }
+    }
+    return "[not found]";
+}
+
+
 void Coordinator::del(const string& key) {
-    string node_id = ring.get_node(key);
-    if (nodes.count(node_id)) {
-        auto n = nodes[node_id];
-        json req = {{"op","del"}, {"key",key}};
-        auto resp = send_request(n.host, n.port, req);
-        cout << "[" << node_id << "] DEL " << key << " -> " << resp << "\n";
+    auto node_ids = ring.get_nodes(key, replicaN);
+    for (auto& node_id : node_ids) {
+        if (nodes.count(node_id)) {
+            auto n = nodes[node_id];
+            json req = {{"op","del"}, {"key",key}};
+            try {
+                auto resp = send_request(n.host, n.port, req);
+                cout << "[" << node_id << "] DEL " << key << " -> " << resp << "\n";
+            } catch (...) {
+                cerr << "[WARN] DEL failed on " << node_id << endl;
+            }
+        }
     }
 }
+
 
 void Coordinator::show_nodes() const {
     cout << "Active Nodes:\n";

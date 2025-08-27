@@ -41,6 +41,10 @@ int main() {
             break;
         }else if (cmd == "stats") {
             coord.show_stats();
+        }else if (cmd == "setreplica") {
+            int n;
+            iss >> n;
+            coord.set_replica(n);
         }
 
     }
