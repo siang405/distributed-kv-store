@@ -4,15 +4,13 @@
 #include <unordered_set>
 using namespace std;
 
-// 建構子
 HashRing::HashRing(int replicas) : replicas(replicas) {}
 
-// 雜湊函式
-size_t HashRing::hash_fn(const string& key) {
+size_t HashRing::hash_fn(const string& key) const {
     return hash<string>{}(key);
 }
 
-// 加入節點
+
 void HashRing::add_node(const string& node_id) {
     for (int i = 0; i < replicas; i++) {
         string vnode = node_id + "#" + to_string(i);
@@ -22,7 +20,6 @@ void HashRing::add_node(const string& node_id) {
     cout << "Node added: " << node_id << " (with " << replicas << " replicas)\n";
 }
 
-// 移除節點
 void HashRing::remove_node(const string& node_id) {
     for (int i = 0; i < replicas; i++) {
         string vnode = node_id + "#" + to_string(i);
@@ -32,7 +29,6 @@ void HashRing::remove_node(const string& node_id) {
     cout << "Node removed: " << node_id << "\n";
 }
 
-// 找到 key 所屬節點
 string HashRing::get_node(const string& key) {
     if (ring.empty()) return "";
 
@@ -45,7 +41,6 @@ string HashRing::get_node(const string& key) {
     return it->second;
 }
 
-// 顯示 ring 狀態
 void HashRing::show_ring() {
     cout << "Hash Ring:\n";
     for (auto& [h, node] : ring) {
@@ -53,7 +48,7 @@ void HashRing::show_ring() {
     }
 }
 
-vector<string> HashRing::get_nodes(const string& key, int replicaN) {
+vector<string> HashRing::get_nodes(const string& key, int replicaN) const {
     vector<string> result;
     if (ring.empty() || replicaN <= 0) return result;
 
@@ -62,7 +57,7 @@ vector<string> HashRing::get_nodes(const string& key, int replicaN) {
     if (it == ring.end()) it = ring.begin();
 
     unordered_set<string> seen;
-    int traversed = 0;  // 最多走一整圈
+    int traversed = 0; 
     while (result.size() < (size_t)replicaN && traversed < (int)ring.size()) {
         const string& node = it->second;
         if (!seen.count(node)) {

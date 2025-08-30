@@ -9,6 +9,9 @@ A simple **distributed key-value store** built in C++ that demonstrates:
 * **Statistics & monitoring** (`stats` command)
 * **Replication** with configurable replica factor (`setreplica <N>`)
 * **Fault tolerance** by falling back to replicas if primary fails
+* **Heartbeat** to detect node liveness
+* **Persistence with WAL (Write-Ahead Log)**
+* **Rebalance command** to redistribute keys after topology change
 
 This project is designed to simulate core ideas behind distributed databases and caching systems (like DynamoDB, Cassandra, or Redis Cluster).
 
@@ -32,13 +35,28 @@ This project is designed to simulate core ideas behind distributed databases and
 
   * If a node is down, coordinator will query replicas automatically
 
+* **Heartbeat Monitoring**
+
+  * Coordinator periodically pings nodes to check status (`UP`/`DOWN`)
+
+* **Persistence with WAL**
+
+  * Each `put`/`del` is appended to `data.log`
+  * On restart, log is replayed to restore state
+  * Automatic **compaction** after N operations to prevent log bloat
+
+* **Rebalance**
+
+  * `rebalance` command ensures all keys are redistributed according to the latest hash ring
+  * Logs key movement (`Copied`, `Removed`) for debugging
+
 * **Core KV Operations**
 
   * `put <k> <v>`, `get <k>`, `del <k>`
 
 * **Monitoring**
 
-  * `show` → Displays all active nodes with their key counts
+  * `show` → Displays all active nodes with their key counts and status
   * `stats` → Displays total keys, number of nodes, and average keys per node
 
 * **JSON-based RPC**
@@ -92,9 +110,10 @@ Run the coordinator CLI:
 | `put <key> <value>`   | Store key-value pair                                          |
 | `get <key>`           | Retrieve value for a key                                      |
 | `del <key>`           | Delete a key                                                  |
-| `show`                | Show active nodes with their key counts                       |
+| `show`                | Show active nodes with their key counts and status            |
 | `stats`               | Show system-wide stats (nodes, total keys, avg keys per node) |
 | `setreplica <N>`      | Set replication factor (default 1)                            |
+| `rebalance`           | Redistribute keys after node join/leave                       |
 | `exit`                | Exit the coordinator CLI                                      |
 
 ---
@@ -103,7 +122,7 @@ Run the coordinator CLI:
 
 ```
 Distributed KV Store with Consistent Hashing
-Commands: addnode <id> <port>, removenode <id>, put <k> <v>, get <k>, del <k>, setreplica <N>, show, stats, exit
+Commands: addnode <id> <port>, removenode <id>, put <k> <v>, get <k>, del <k>, setreplica <N>, rebalance, show, stats, exit
 
 > addnode A 5001
 Node added: A (127.0.0.1:5001)
@@ -121,13 +140,15 @@ Replicas for key apple: A B
 [A] PUT apple = 123 -> {"status":"ok"}
 [B] PUT apple = 123 -> {"status":"ok"}
 
-> get apple
-apple -> 123
-
 > show
 Active Nodes:
-  A (127.0.0.1:5001, keys=1)
-  B (127.0.0.1:5002, keys=1)
+  A (127.0.0.1:5001, keys=1, status=UP)
+  B (127.0.0.1:5002, keys=1, status=UP)
+
+> rebalance
+[Coordinator] Starting rebalance...
+[Rebalance] Copied key 'apple' to B
+[Coordinator] Rebalance complete.
 
 > stats
 
@@ -141,11 +162,12 @@ Avg Keys per Node: 1
 
 ## Future Work
 
-* Heartbeat + automatic failover
-* Persistence (WAL / data.json)
-* Smarter rebalance policies
-* Benchmarking & visualization
-* Dockerized deployment
+* Automatic failover & smarter rebalance policies
+* Quorum-based consistency (R+W > N)
+* Persistence snapshotting & replication log
+* HTTP / gRPC API support
+* Benchmarking & visualization tools
+* Dockerized deployment & Kubernetes demo
 
 ---
 

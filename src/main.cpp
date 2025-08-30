@@ -45,7 +45,10 @@ int main() {
             int n;
             iss >> n;
             coord.set_replica(n);
+        }else if (cmd == "rebalance") {
+            coord.rebalance();
         }
+
 
     }
     return 0;

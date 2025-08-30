@@ -1,44 +1,100 @@
-// src/node_server.cpp
 #include <iostream>
 #include <unordered_map>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <sstream>
-#include <nlohmann/json.hpp>  // JSON library (你可以在 CMakeLists.txt 加上)
+#include <fstream>
+#include <nlohmann/json.hpp>
 
 using namespace std;
 using json = nlohmann::json;
-
+int op_count = 0;           
+const int COMPACT_THRESHOLD = 100; 
 unordered_map<string, string> store;
+const string DATA_FILE = "data.log";
+
+void compact() {
+    ofstream ofs(DATA_FILE, ios::trunc);
+    for (auto& [k, v] : store) {
+        ofs << "PUT " << k << " " << v << "\n";
+    }
+    cout << "[Compaction] data.log compacted, size=" << store.size() << endl;
+}
+
+void persist_append(const string& op, const string& key, const string& value = "") {
+    ofstream ofs(DATA_FILE, ios::app);
+    if (op == "PUT") {
+        ofs << "PUT " << key << " " << value << "\n";
+    } else if (op == "DEL") {
+        ofs << "DEL " << key << "\n";
+    }
+
+    if (++op_count >= COMPACT_THRESHOLD) {
+        compact();
+        op_count = 0;
+    }
+}
+
+void load_data() {
+    ifstream ifs(DATA_FILE);
+    string op, key, value;
+    while (ifs >> op) {
+        if (op == "PUT") {
+            ifs >> key >> value;
+            store[key] = value;
+        } else if (op == "DEL") {
+            ifs >> key;
+            store.erase(key);
+        }
+    }
+}
 
 string handle_request(const string& req) {
     json j = json::parse(req);
     string op = j["op"];
 
     if (op == "put") {
-        store[j["key"]] = j["value"];
+        string key = j["key"];
+        string val = j["value"];
+        store[key] = val;
+        persist_append("PUT", key, val);
         return json({{"status", "ok"}}).dump();
+
     } else if (op == "get") {
         string key = j["key"];
         if (store.count(key))
             return json({{"status", "ok"}, {"value", store[key]}}).dump();
         else
             return json({{"status", "not_found"}}).dump();
+
     } else if (op == "del") {
         string key = j["key"];
-        if (store.erase(key))
+        if (store.erase(key)) {
+            persist_append("DEL", key);
             return json({{"status", "ok"}}).dump();
-        else
+        } else {
             return json({{"status", "not_found"}}).dump();
-    }else if (op == "size") {
+        }
+
+    } else if (op == "size") {
         return json({{"status", "ok"}, {"keys", (int)store.size()}}).dump();
+
+    } else if (op == "dump") {
+        json data;
+        for (auto& [k, v] : store) {
+            data[k] = v;
+        }
+        return json({{"status","ok"}, {"data", data}}).dump();
     }
+
     return json({{"status", "error"}, {"msg", "unknown op"}}).dump();
 }
 
 int main(int argc, char* argv[]) {
     int port = 5000;
     if (argc > 1) port = stoi(argv[1]);
+
+    load_data();
 
     int server_fd, new_socket;
     struct sockaddr_in address;
